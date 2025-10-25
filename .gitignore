@@ -1,0 +1,8 @@
+__pycache__/
+
+input_images/
+output/
+old/
+oldv2/
+
+.env
