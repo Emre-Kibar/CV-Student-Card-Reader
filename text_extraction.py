@@ -46,7 +46,19 @@ class TextExtractor:
                 
                 if text:
                     print(f"  ✓ {os.path.basename(field['path'])} (y={field['y']}) -> {text}")
-                    extracted_texts.append(text)
+                    # Return structured data
+                    # Assuming field has x, y. Width/Height might need to be read from image or passed from field_filter
+                    # field_filter saves image but only passes {x,y,path}.
+                    # We can get width/height from image shape.
+                    h, w = image.shape[:2]
+                    extracted_texts.append({
+                        'text': text,
+                        'x': field['x'],
+                        'y': field['y'],
+                        'width': w,
+                        'height': h,
+                        'path': field['path']
+                    })
                 else:
                     print(f"  ⚠ {os.path.basename(field['path'])} (y={field['y']}) -> No text")
             
@@ -65,8 +77,8 @@ class TextExtractor:
         # Save results
         output_file = os.path.join(output_dir, f'{base_name}_ocr_results.txt')
         with open(output_file, 'w', encoding='utf-8') as f:
-            for text in extracted_texts:
-                f.write(text + '\n')
+            for item in extracted_texts:
+                f.write(item['text'] + '\n')
         
         print(f"✓ Saved OCR results to '{output_file}'")
         return extracted_texts
