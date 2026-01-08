@@ -30,21 +30,6 @@ class CardDetector:
         print(f"  [DEBUG] Showing '{window_name}' - Press any key to continue...")
         cv2.waitKey(0)
     
-    def _try_canny(self, image):
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        blurred = cv2.bilateralFilter(gray, 11, 17, 17)
-        edges = cv2.Canny(blurred, 30, 200)
-        
-        contours, _ = cv2.findContours(edges.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        contours = sorted(contours, key=cv2.contourArea, reverse=True)[:10]
-        
-        for c in contours:
-            peri = cv2.arcLength(c, True)
-            approx = cv2.approxPolyDP(c, 0.02 * peri, True)
-            if len(approx) == 4 and cv2.contourArea(c) > 1000:
-                return approx
-        return None
-
     def detect_card(self, image_path):
         """Main function to detect ID card and return straightened card image."""
         image = cv2.imread(image_path)
@@ -55,44 +40,44 @@ class CardDetector:
         print(f"✓ Loaded image: {image.shape[1]}x{image.shape[0]} pixels")
         original_with_detection = image.copy()
         
-        # Strategy 1: Standard Canny on Original (Existing)
-        card_contour = self._try_canny(image)
+        # Preprocessing
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        blurred = cv2.bilateralFilter(gray, 11, 17, 17)
         
-        # Strategy 2: Resize + Canny (if large image)
-        if card_contour is None and image.shape[1] > 1000:
-            print("⚠ Standard detection failed. Retrying with resizing...")
-            ratio = 1000.0 / image.shape[1]
-            dim = (1000, int(image.shape[0] * ratio))
-            resized = cv2.resize(image, dim, interpolation=cv2.INTER_AREA)
+        if self.debug_mode:
+            self._show_image('Grayscale', gray)
+            self._show_image('Blurred', blurred)
+        
+        # Edge Detection
+        edges = cv2.Canny(blurred, 30, 200)
+        if self.debug_mode:
+            self._show_image('Edges', edges)
+        
+        # Find Contours
+        contours, _ = cv2.findContours(edges.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        contours = sorted(contours, key=cv2.contourArea, reverse=True)[:10]
+        print(f"✓ Found {len(contours)} contours")
+        
+        # Find the card contour
+        card_contour = None
+        for i, contour in enumerate(contours):
+            peri = cv2.arcLength(contour, True)
+            approx = cv2.approxPolyDP(contour, 0.02 * peri, True)
             
-            cnt = self._try_canny(resized)
-            if cnt is not None:
-                card_contour = (cnt / ratio).astype("int")
-                print("✅ Found card using resizing!")
-
-        # Strategy 3: Thresholding (Otsu)
+            if len(approx) == 4:
+                area = cv2.contourArea(contour)
+                if area > 10000:
+                    card_contour = approx
+                    print(f"✓ Found card contour (#{i}) with area: {area:.0f}")
+                    break
+        
         if card_contour is None:
-            print("⚠ Edge detection failed. Retrying with thresholding...")
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-            blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-            _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-            
-            # Find contours on threshold
-            contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-            contours = sorted(contours, key=cv2.contourArea, reverse=True)[:10]
-            
-            # Use fallback detection logic on these contours
-            card_contour = self._fallback_detection(None, contours)
-            if card_contour is not None:
-                 print("✅ Found card using thresholding!")
-
-        # If found, draw it
-        if card_contour is not None:
-             cv2.drawContours(original_with_detection, [card_contour], -1, (0, 255, 0), 3)
-        else:
-             print("❌ Could not detect a rectangular card")
-             return {'success': False, 'original': image}
-
+            print("❌ Could not detect a rectangular card")
+            card_contour = self._fallback_detection(edges, contours)
+            if card_contour is None:
+                return {'success': False, 'original': image}
+        
+        cv2.drawContours(original_with_detection, [card_contour], -1, (0, 255, 0), 3)
         if self.debug_mode:
             self._show_image('Detected Card', original_with_detection)
         

@@ -25,7 +25,7 @@ class IDCardProcessor:
         self.field_extractor = FieldExtractor(debug_mode=debug_mode)
         self.text_extractor = TextExtractor(x_threshold=200, debug_mode=debug_mode)
     
-    def process_image(self, image_path, output_dir='output', progress_callback=None):
+    def process_image(self, image_path, output_dir='output'):
         """Process a single ID card image through the entire pipeline."""
         print(f"\n{'='*70}")
         print(f"📷 Processing: {image_path}")
@@ -34,9 +34,6 @@ class IDCardProcessor:
         # Get base name for output files
         base_name = Path(image_path).stem
         
-        if progress_callback:
-            progress_callback("detecting_card", 10)
-
         # Step 1: Detect and extract card
         print("\n[Step 1/3] Card Detection")
         print('-'*70)
@@ -44,13 +41,8 @@ class IDCardProcessor:
         
         if not result['success']:
             print("❌ Failed to detect card")
-            if progress_callback:
-                progress_callback("failed_detection", 0)
             return None
         
-        if progress_callback:
-            progress_callback("extracting_fields", 40)
-
         # Save detected card
         os.makedirs(output_dir, exist_ok=True)
         card_path = os.path.join(output_dir, f'{base_name}_detected_card.jpg')
@@ -64,18 +56,12 @@ class IDCardProcessor:
             result['card_image'], base_name, output_dir
         )
         
-        if progress_callback:
-            progress_callback("performing_ocr", 70)
-
         # Step 3: Extract text
         print("\n[Step 3/3] Text Extraction (OCR)")
         print('-'*70)
         extracted_texts = self.text_extractor.extract_text(
             field_info, base_name, output_dir
         )
-
-        if progress_callback:
-            progress_callback("completed", 100)
         
         print(f"\n{'='*70}")
         print("✅ SUCCESS! Processing complete")
@@ -126,9 +112,9 @@ class IDCardProcessor:
         
         for result in results:
             print(f"\n{result['base_name']}:")
-            for item in result['extracted_texts']:
-                text_val = item['text'] if isinstance(item, dict) else item
-                print(f"  - {text_val}")        
+            for text in result['extracted_texts']:
+                print(f"  - {text}")
+        
         return results
 
 
@@ -137,7 +123,7 @@ def main():
     # Configuration
     INPUT_DIR = 'input_images'
     OUTPUT_DIR = 'output'
-    DEBUG_MODE = False  # Set to True to see intermediate visualizations with key waits
+    DEBUG_MODE = True  # Set to True to see intermediate visualizations with key waits
     
     # Create processor
     processor = IDCardProcessor(debug_mode=DEBUG_MODE)
